@@ -1,4 +1,6 @@
 import sys
+import os
+import json
 import platform
 from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QSlider, QPushButton, QLabel
 from PyQt5.QtCore import Qt, QRect, pyqtSignal, QPoint
@@ -23,6 +25,8 @@ else:
 class VolumeControl(QWidget):
     def __init__(self):
         super().__init__()
+        self.settings_file = os.path.join(os.path.expanduser("~"), ".volume_control_settings.json")
+        self.load_settings()
         self.init_ui()
         self.set_window_properties()
         
@@ -58,7 +62,14 @@ class VolumeControl(QWidget):
         self.volume_slider = QSlider(Qt.Vertical)
         self.volume_slider.setMinimum(0)
         self.volume_slider.setMaximum(100)
-        self.volume_slider.setValue(self.get_system_volume())
+        
+        # 使用加载的初始音量值，如果没有则使用系统音量
+        if self.initial_volume is not None:
+            self.volume_slider.setValue(self.initial_volume)
+            # 同时设置系统音量为保存的值
+            self.set_system_volume(self.initial_volume)
+        else:
+            self.volume_slider.setValue(self.get_system_volume())
         self.volume_slider.setStyleSheet("""
             QSlider::groove:vertical {
                 border: 2px solid #555;
@@ -95,9 +106,12 @@ class VolumeControl(QWidget):
         
         self.setLayout(layout)
         
-        # 设置初始位置（右上角）
+        # 设置初始位置（从设置中加载或默认右上角）
         screen_geometry = QApplication.desktop().screenGeometry()
-        self.setGeometry(screen_geometry.width() - 80, 50, 70, 200)
+        if hasattr(self, 'window_x') and hasattr(self, 'window_y'):
+            self.setGeometry(self.window_x, self.window_y, 70, 200)
+        else:
+            self.setGeometry(screen_geometry.width() - 80, 50, 70, 200)
         
         self.is_muted = False
         self.original_volume = self.volume_slider.value()
@@ -201,6 +215,52 @@ class VolumeControl(QWidget):
         painter.setBrush(QColor(0, 0, 0, 180))  # 半透明黑色背景
         painter.setPen(QPen(QColor(100, 100, 100), 2))
         painter.drawRoundedRect(self.rect(), 10, 10)
+
+    def load_settings(self):
+        """加载之前保存的设置"""
+        try:
+            if os.path.exists(self.settings_file):
+                with open(self.settings_file, 'r', encoding='utf-8') as f:
+                    settings = json.load(f)
+                    
+                    # 加载窗口位置
+                    self.window_x = settings.get('window_x', None)
+                    self.window_y = settings.get('window_y', None)
+                    
+                    # 加载音量设置
+                    saved_volume = settings.get('volume', None)
+                    if saved_volume is not None:
+                        # 使用保存的音量作为初始音量
+                        self.initial_volume = saved_volume
+                    else:
+                        self.initial_volume = None
+            else:
+                self.window_x = None
+                self.window_y = None
+                self.initial_volume = None
+        except Exception as e:
+            print(f"加载设置时出错: {e}")
+            self.window_x = None
+            self.window_y = None
+            self.initial_volume = None
+
+    def save_settings(self):
+        """保存当前设置"""
+        try:
+            settings = {
+                'window_x': self.x(),
+                'window_y': self.y(),
+                'volume': self.volume_slider.value()
+            }
+            with open(self.settings_file, 'w', encoding='utf-8') as f:
+                json.dump(settings, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            print(f"保存设置时出错: {e}")
+
+    def closeEvent(self, event):
+        """窗口关闭时保存设置"""
+        self.save_settings()
+        event.accept()
 
 def main():
     app = QApplication(sys.argv)
