@@ -108,7 +108,7 @@ class VolumeControl(QWidget):
         
         # 设置初始位置（从设置中加载或默认右上角）
         screen_geometry = QApplication.desktop().screenGeometry()
-        if hasattr(self, 'window_x') and hasattr(self, 'window_y'):
+        if hasattr(self, 'window_x') and hasattr(self, 'window_y') and self.window_x is not None and self.window_y is not None:
             self.setGeometry(self.window_x, self.window_y, 70, 200)
         else:
             self.setGeometry(screen_geometry.width() - 80, 50, 70, 200)
