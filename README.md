@@ -10,6 +10,7 @@
 - 可拖拽移动位置
 - 支持Windows 11触屏手势
 - 窗口始终保持置顶
+- 记住上次退出时的位置和音量设置
 
 ## 安装要求
 
@@ -56,3 +57,7 @@ python DesktopVolumeControl.py
 - 界面大小和位置
 - 颜色主题
 - 初始音量值
+
+程序会在用户目录下创建 `.volume_control_settings.json` 文件来保存以下信息：
+- 窗口位置 (window_x, window_y)
+- 当前音量值 (volume)
