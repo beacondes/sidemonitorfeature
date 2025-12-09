@@ -18,9 +18,21 @@ if platform.system() == "Windows":
         from ctypes import cast, POINTER
     except ImportError:
         AudioUtilities = None
+elif platform.system() == "Linux":
+    import subprocess
+    import os
+    # Linux系统上使用amixer进行音量控制
+    def check_amixer():
+        try:
+            subprocess.run(['which', 'amixer'], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            return True
+        except subprocess.CalledProcessError:
+            return False
+    
+    HAS_AMIXER = check_amixer()
 else:
-    # 在非Windows系统上模拟音量控制功能
-    AudioUtilities = None
+    # 其他系统上模拟音量控制功能
+    HAS_AMIXER = False
 
 class VolumeControl(QWidget):
     def __init__(self):
@@ -124,7 +136,7 @@ class VolumeControl(QWidget):
                                   win32con.SWP_NOMOVE | win32con.SWP_NOSIZE)
         
     def get_system_volume(self):
-        if platform.system() == "Windows" and AudioUtilities:
+        if platform.system() == "Windows" and 'AudioUtilities' in globals() and AudioUtilities:
             try:
                 # 使用pycaw获取系统音量
                 sessions = AudioUtilities.GetAllSessions()
@@ -140,11 +152,22 @@ class VolumeControl(QWidget):
                 return int(volume.GetMasterVolumeLevelScalar() * 100)
             except:
                 pass
+        elif platform.system() == "Linux" and HAS_AMIXER:
+            try:
+                # 使用amixer获取当前音量
+                result = subprocess.run(['amixer', 'get', 'Master'], capture_output=True, text=True)
+                # 解析输出获取音量百分比
+                import re
+                match = re.search(r'\[([0-9]+)%\]', result.stdout)
+                if match:
+                    return int(match.group(1))
+            except:
+                pass
         # 模拟模式下返回默认值
         return 50
     
     def set_system_volume(self, value):
-        if platform.system() == "Windows" and AudioUtilities:
+        if platform.system() == "Windows" and 'AudioUtilities' in globals() and AudioUtilities:
             try:
                 # 使用pycaw设置系统音量
                 devices = AudioUtilities.GetSpeakers()
@@ -153,14 +176,21 @@ class VolumeControl(QWidget):
                 volume.SetMasterVolumeLevelScalar(value / 100, None)
             except:
                 pass
+        elif platform.system() == "Linux" and HAS_AMIXER:
+            try:
+                # 使用amixer设置系统音量
+                subprocess.run(['amixer', '-D', 'default', 'set', 'Master', f'{value}%'], 
+                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            except:
+                pass
         else:
-            # 在非Windows系统上，仅更新UI
+            # 在不支持的系统上，仅更新UI
             pass
             
         self.volume_label.setText(f"{value}%")
     
     def toggle_mute(self):
-        if platform.system() == "Windows" and AudioUtilities:
+        if platform.system() == "Windows" and 'AudioUtilities' in globals() and AudioUtilities:
             try:
                 # 使用pycaw进行静音控制
                 devices = AudioUtilities.GetSpeakers()
@@ -183,8 +213,31 @@ class VolumeControl(QWidget):
             except:
                 # 如果pycaw失败，回退到UI操作
                 self.toggle_mute_fallback()
+        elif platform.system() == "Linux" and HAS_AMIXER:
+            try:
+                # 使用amixer进行静音控制
+                if not self.is_muted:
+                    # 保存当前音量并静音
+                    self.original_volume = self.get_system_volume()
+                    subprocess.run(['amixer', '-D', 'default', 'set', 'Master', 'mute'], 
+                                  stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                    self.volume_slider.setValue(0)
+                    self.mute_button.setText("🔊")
+                    self.is_muted = True
+                else:
+                    # 取消静音并恢复之前的音量
+                    subprocess.run(['amixer', '-D', 'default', 'set', 'Master', 'unmute'], 
+                                  stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                    subprocess.run(['amixer', '-D', 'default', 'set', 'Master', f'{self.original_volume}%'], 
+                                  stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                    self.volume_slider.setValue(self.original_volume)
+                    self.mute_button.setText("🔇")
+                    self.is_muted = False
+            except:
+                # 如果amixer失败，回退到UI操作
+                self.toggle_mute_fallback()
         else:
-            # 非Windows系统或pycaw不可用时的回退方案
+            # 其他系统或不支持时的回退方案
             self.toggle_mute_fallback()
     
     def toggle_mute_fallback(self):
